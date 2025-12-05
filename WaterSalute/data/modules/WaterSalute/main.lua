@@ -109,18 +109,17 @@ function onModuleShutdown()
     if leftTruck then cleanupTruck(leftTruck) end
     if rightTruck then cleanupTruck(rightTruck) end
     
-    -- Unload models
+    -- Unload models (note: SASL will auto-cleanup but we do it explicitly)
     if truckObjectId then
-        unloadObject(truckObjectId)
+        sasl.unloadObject(truckObjectId)
         truckObjectId = nil
     end
     if waterDropObjectId then
-        unloadObject(waterDropObjectId)
+        sasl.unloadObject(waterDropObjectId)
         waterDropObjectId = nil
     end
     
-    -- Unregister custom datarefs
-    unregisterCustomDatarefs()
+    -- Note: SASL automatically cleans up menus and datarefs on shutdown
     
     debugLog("WaterSalute plugin stopped")
 end
@@ -129,21 +128,27 @@ end
 -- Menu System
 --------------------------------------------------------------------------------
 
+-- Local menu storage
+local subMenuId = nil
+
 function createPluginMenu()
-    -- Create menu under Plugins menu
+    -- Create menu item under Plugins menu
     menuId = sasl.appendMenuItem(PLUGINS_MENU_ID, "Water Salute")
-    local subMenu = sasl.createMenu("Water Salute", PLUGINS_MENU_ID, menuId)
     
-    menuStartItem = sasl.appendMenuItem(subMenu, "Start Water Salute", onMenuStart)
-    menuStopItem = sasl.appendMenuItem(subMenu, "Stop Water Salute", onMenuStop)
+    -- Create submenu
+    subMenuId = sasl.createMenu("Water Salute", PLUGINS_MENU_ID, menuId)
+    
+    -- Add menu items
+    menuStartItem = sasl.appendMenuItem(subMenuId, "Start Water Salute", onMenuStart)
+    menuStopItem = sasl.appendMenuItem(subMenuId, "Stop Water Salute", onMenuStop)
     
     updateMenuState()
 end
 
 function updateMenuState()
-    if menuId then
-        sasl.enableMenuItem(menuId, menuStartItem, pluginState == STATE_IDLE and 1 or 0)
-        sasl.enableMenuItem(menuId, menuStopItem, pluginState ~= STATE_IDLE and 1 or 0)
+    if subMenuId then
+        sasl.enableMenuItem(subMenuId, menuStartItem, pluginState == STATE_IDLE and 1 or 0)
+        sasl.enableMenuItem(subMenuId, menuStopItem, pluginState ~= STATE_IDLE and 1 or 0)
     end
 end
 
@@ -160,26 +165,26 @@ end
 --------------------------------------------------------------------------------
 
 function loadFireTruckModel()
-    local objPath = getProjectPath() .. "/resources/firetruck.obj"
-    truckObjectId = loadObject(objPath)
+    -- Use sasl.loadObject which uses the searchResourcesPath
+    truckObjectId = sasl.loadObject("firetruck.obj")
     
     if truckObjectId then
         debugLog("Fire truck model loaded successfully")
     else
-        debugLog("WARNING: Failed to load fire truck model from " .. objPath)
-        debugLog("Fire trucks will not be visible")
+        debugLog("WARNING: Failed to load fire truck model")
+        debugLog("Fire trucks will not be visible - please add firetruck.obj to resources folder")
     end
 end
 
 function loadWaterDropModel()
-    local objPath = getProjectPath() .. "/resources/waterdrop.obj"
-    waterDropObjectId = loadObject(objPath)
+    -- Use sasl.loadObject which uses the searchResourcesPath
+    waterDropObjectId = sasl.loadObject("waterdrop.obj")
     
     if waterDropObjectId then
         debugLog("Water drop model loaded successfully")
     else
-        debugLog("WARNING: Failed to load water drop model from " .. objPath)
-        debugLog("Water particles will not be visible")
+        debugLog("WARNING: Failed to load water drop model")
+        debugLog("Water particles will not be visible - please add waterdrop.obj to resources folder")
     end
 end
 
@@ -400,15 +405,15 @@ function startWaterSalute()
     -- Create truck instances
     if truckObjectId then
         leftTruck.objectId = truckObjectId
-        leftTruck.instance = createInstance(truckObjectId, {})
+        leftTruck.instance = sasl.createInstance(truckObjectId, {})
         if leftTruck.instance then
-            setInstancePosition(leftTruck.instance, leftTruck.x, leftTruck.y, leftTruck.z, 0, leftTruck.heading, 0, {})
+            sasl.setInstancePosition(leftTruck.instance, leftTruck.x, leftTruck.y, leftTruck.z, 0, leftTruck.heading, 0, {})
         end
         
         rightTruck.objectId = truckObjectId
-        rightTruck.instance = createInstance(truckObjectId, {})
+        rightTruck.instance = sasl.createInstance(truckObjectId, {})
         if rightTruck.instance then
-            setInstancePosition(rightTruck.instance, rightTruck.x, rightTruck.y, rightTruck.z, 0, rightTruck.heading, 0, {})
+            sasl.setInstancePosition(rightTruck.instance, rightTruck.x, rightTruck.y, rightTruck.z, 0, rightTruck.heading, 0, {})
         end
     end
     

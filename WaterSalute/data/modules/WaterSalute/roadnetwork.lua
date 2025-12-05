@@ -254,7 +254,7 @@ function loadAptDat(acLat, acLon)
     
     -- Convert all node coordinates to local OpenGL coordinates
     for i, node in ipairs(roadNetwork.nodes) do
-        local x, y, z = worldToLocal(node.lat, node.lon, 0)
+        local x, y, z = sasl.worldToLocal(node.lat, node.lon, 0)
         node.x = x
         node.z = z
     end

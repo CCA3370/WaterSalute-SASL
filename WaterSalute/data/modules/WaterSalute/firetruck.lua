@@ -80,14 +80,14 @@ end
 -- Cleanup a fire truck
 function cleanupTruck(truck)
     if truck.instance then
-        destroyInstance(truck.instance)
+        sasl.destroyInstance(truck.instance)
         truck.instance = nil
     end
     
     -- Clean up all particle instances
     for i, particle in ipairs(truck.particles) do
         if particle.instance then
-            destroyInstance(particle.instance)
+            sasl.destroyInstance(particle.instance)
             particle.instance = nil
         end
     end
@@ -129,7 +129,7 @@ end
 -- Update truck instance position for rendering
 function updateTruckInstance(truck)
     if truck.instance then
-        setInstancePosition(truck.instance, truck.x, truck.y, truck.z, 0, truck.heading, 0, {})
+        sasl.setInstancePosition(truck.instance, truck.x, truck.y, truck.z, 0, truck.heading, 0, {})
     end
 end
 
@@ -192,9 +192,9 @@ function emitParticle(truck, waterDropObjectId)
     
     -- Create instance for this particle if water drop model is loaded
     if waterDropObjectId then
-        particle.instance = createInstance(waterDropObjectId, {})
+        particle.instance = sasl.createInstance(waterDropObjectId, {})
         if particle.instance then
-            setInstancePosition(particle.instance, particle.x, particle.y, particle.z, 0, 0, 0, {})
+            sasl.setInstancePosition(particle.instance, particle.x, particle.y, particle.z, 0, 0, 0, {})
         end
     end
     
@@ -243,7 +243,7 @@ function updateParticle(particle, dt)
     
     -- Update instance position
     if particle.instance then
-        setInstancePosition(particle.instance, particle.x, particle.y, particle.z, 0, 0, 0, {})
+        sasl.setInstancePosition(particle.instance, particle.x, particle.y, particle.z, 0, 0, 0, {})
     end
     
     -- Update lifetime
@@ -251,7 +251,7 @@ function updateParticle(particle, dt)
     if particle.lifetime <= 0 then
         particle.active = false
         if particle.instance then
-            destroyInstance(particle.instance)
+            sasl.destroyInstance(particle.instance)
             particle.instance = nil
         end
         return false

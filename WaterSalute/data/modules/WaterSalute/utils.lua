@@ -71,9 +71,9 @@ end
 
 -- Get terrain height at a position
 function getTerrainHeight(x, z)
-    local result, lat, lon, alt, nx, ny, nz, vx, vy, vz, isWet = probeTerrain(x, 10000.0, z)
+    local result, locationX, locationY, locationZ, nx, ny, nz, vx, vy, vz, isWet = sasl.probeTerrain(x, 10000.0, z)
     if result == PROBE_HIT_TERRAIN then
-        return lat  -- 'lat' is actually the Y coordinate (height) in SASL
+        return locationY  -- locationY is the height at the probed position
     end
     return 0.0
 end
