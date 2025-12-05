@@ -5,12 +5,15 @@ X-Plane 12 SASL3 (Lua) 插件，模拟飞机过水门仪式。两辆消防车驶
 ## 功能
 
 - 通过菜单控制启动/停止 (Plugins → Water Salute)
+- **X-Plane 命令绑定** - 可绑定到键盘/摇杆按钮
 - 自动检查飞机在地面且速度 < 40 节
 - 消防车根据飞机翼展自动定位
 - 8x8 消防车物理转向模型（阿克曼转向）
 - **水柱喷射效果**（支持两种实现方式）
+- **3D 位置音效** - 水喷射声、消防车引擎声
 - **飞机经过水门时，玻璃上出现雨滴效果**
 - 道路网络路径规划（读取 apt.dat）
+- **用户配置保存** - 设置自动保存/加载
 
 ## 安装
 
@@ -18,19 +21,34 @@ X-Plane 12 SASL3 (Lua) 插件，模拟飞机过水门仪式。两辆消防车驶
 
 ## 使用
 
+### 菜单方式
+
 1. 飞机在地面低速滑行
 2. 菜单：**Plugins → Water Salute → Start Water Salute**
 3. 点击 **Stop Water Salute** 结束仪式
 
+### 命令绑定方式
+
+可以在 X-Plane 设置中将以下命令绑定到键盘或摇杆：
+
+| 命令 | 说明 |
+|------|------|
+| `watersalute/start` | 启动水门仪式 |
+| `watersalute/stop` | 停止水门仪式 |
+| `watersalute/toggle` | 切换启动/停止 |
+| `watersalute/horn` | 鸣响消防车喇叭 |
+
 ## 资源文件
 
-需要在 `WaterSalute/data/modules/WaterSalute/resources/` 目录下放置模型文件：
+需要在 `WaterSalute/data/modules/WaterSalute/resources/` 目录下放置模型和音效文件：
 
-### 必需
+### 模型文件
+
+#### 必需
 
 - `firetruck.obj` - 消防车3D模型
 
-### 水柱效果（二选一）
+#### 水柱效果（二选一）
 
 | 文件 | 说明 | 性能 |
 |------|------|------|
@@ -38,6 +56,16 @@ X-Plane 12 SASL3 (Lua) 插件，模拟飞机过水门仪式。两辆消防车驶
 | `waterdrop.obj` | 备选 - 水滴粒子模型，创建多个实例模拟水柱 | 一般（每辆车~200个实例） |
 
 插件启动时会优先加载 `waterjet.obj`，如果找不到则使用 `waterdrop.obj` 粒子系统。
+
+### 音效文件（可选）
+
+| 文件 | 说明 |
+|------|------|
+| `water_spray.wav` | 水柱喷射声（循环播放） |
+| `truck_engine.wav` | 消防车引擎声（循环播放） |
+| `truck_horn.wav` | 消防车喇叭声 |
+
+音效为 3D 定位音效，会根据消防车位置和摄像机距离自动调整音量。
 
 ## 水柱效果实现
 
@@ -97,6 +125,28 @@ OBJ 动画 datarefs:
 | `watersalute/truck/cannon_pitch` | 度 | 0 ~ 90 | R/W | 水炮俯仰角 |
 | `watersalute/truck/cannon_yaw` | 度 | -180 ~ 180 | R/W | 水炮偏航角 |
 | `watersalute/truck/speed` | m/s | - | R | 车辆速度 |
+
+## 配置文件
+
+用户设置会自动保存到 `WaterSalute/data/modules/output/watersalute_config.json`：
+
+```json
+{
+    "soundEnabled": true,
+    "soundVolume": 100,
+    "autoStartOnGround": false,
+    "truckSpeed": 15,
+    "waterJetHeight": 25
+}
+```
+
+| 设置 | 默认值 | 说明 |
+|------|--------|------|
+| `soundEnabled` | true | 是否启用音效 |
+| `soundVolume` | 100 | 音量 (0-100%) |
+| `autoStartOnGround` | false | 条件满足时自动启动 |
+| `truckSpeed` | 15 | 消防车接近速度 (m/s) |
+| `waterJetHeight` | 25 | 水柱高度 (m) |
 
 ## 转向系统
 

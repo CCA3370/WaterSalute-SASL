@@ -18,7 +18,7 @@
 
 -- Define the project name
 project_name = "WaterSalute"
-project_version = "1.0.0"
+project_version = "1.1.0"
 
 --------------------------------------------------------------------------------
 -- Global Plugin State
@@ -51,16 +51,63 @@ customDatarefs = {}
 debugLogTimer = 0.0
 
 --------------------------------------------------------------------------------
+-- Sound System
+--------------------------------------------------------------------------------
+
+-- Sound sample IDs
+soundWaterSpray = nil
+soundTruckEngine = nil
+soundTruckHorn = nil
+
+-- Sound settings
+SOUND_WATER_SPRAY_GAIN = 800      -- Volume for water spray (0-1000)
+SOUND_TRUCK_ENGINE_GAIN = 600     -- Volume for truck engine
+SOUND_TRUCK_HORN_GAIN = 900       -- Volume for truck horn
+SOUND_MAX_DISTANCE = 500          -- Maximum audible distance in meters
+
+--------------------------------------------------------------------------------
+-- Commands
+--------------------------------------------------------------------------------
+
+-- Command IDs
+cmdStartWaterSalute = nil
+cmdStopWaterSalute = nil
+cmdToggleWaterSalute = nil
+cmdTruckHorn = nil
+
+--------------------------------------------------------------------------------
+-- Configuration
+--------------------------------------------------------------------------------
+
+-- Configuration file path
+CONFIG_FILE_PATH = nil
+
+-- User settings (with defaults)
+userSettings = {
+    soundEnabled = true,
+    soundVolume = 100,            -- 0-100 percentage
+    autoStartOnGround = false,    -- Auto start when conditions are met
+    truckSpeed = 15,              -- Truck approach speed m/s
+    waterJetHeight = 25           -- Water jet height in meters
+}
+
+--------------------------------------------------------------------------------
 -- Initialization
 --------------------------------------------------------------------------------
 
 function onModuleInit()
     debugLog("========================================")
-    debugLog("WaterSalute plugin starting...")
+    debugLog("WaterSalute plugin v" .. project_version .. " starting...")
     debugLog("========================================")
     
     -- Initialize random number generator
     math.randomseed(os.time())
+    
+    -- Set up configuration file path
+    CONFIG_FILE_PATH = moduleDirectory .. "/output/watersalute_config.json"
+    
+    -- Load user configuration
+    loadConfiguration()
     
     -- Initialize datarefs
     drOnGround = globalPropertyi("sim/flightmodel/failures/onground_any")
@@ -83,6 +130,12 @@ function onModuleInit()
     -- Register custom datarefs
     registerCustomDatarefs()
     
+    -- Register X-Plane commands
+    registerCommands()
+    
+    -- Load sound samples
+    loadSounds()
+    
     -- Load fire truck model
     loadFireTruckModel()
     
@@ -101,6 +154,9 @@ end
 
 function onModuleShutdown()
     debugLog("WaterSalute plugin stopping...")
+    
+    -- Stop all sounds
+    stopAllSounds()
     
     -- Cleanup raindrop effect
     cleanupRaindropEffect()
@@ -123,9 +179,18 @@ function onModuleShutdown()
         waterDropObjectId = nil
     end
     
-    -- Note: SASL automatically cleans up menus and datarefs on shutdown
+    -- Unload sounds
+    unloadSounds()
+    
+    -- Note: SASL automatically cleans up menus, datarefs, and commands on shutdown
     
     debugLog("WaterSalute plugin stopped")
+end
+
+-- Called when project is about to be unloaded - save configuration
+function onModuleDone()
+    saveConfiguration()
+    debugLog("Configuration saved")
 end
 
 --------------------------------------------------------------------------------
@@ -259,6 +324,243 @@ function updateCustomDatarefs()
     local cannonYaw = get(customDatarefs.cannonYaw)
     leftTruck.cannonYaw = normalizeAngle180(cannonYaw[1])
     rightTruck.cannonYaw = normalizeAngle180(cannonYaw[2])
+end
+
+--------------------------------------------------------------------------------
+-- X-Plane Commands
+--------------------------------------------------------------------------------
+
+function registerCommands()
+    debugLog("Registering X-Plane commands...")
+    
+    -- Create command: Start Water Salute
+    cmdStartWaterSalute = sasl.createCommand(
+        "watersalute/start",
+        "Start Water Salute Ceremony"
+    )
+    sasl.registerCommandHandler(cmdStartWaterSalute, 0, function(phase)
+        if phase == SASL_COMMAND_BEGIN then
+            startWaterSalute()
+        end
+        return 0  -- Consume the command
+    end)
+    
+    -- Create command: Stop Water Salute
+    cmdStopWaterSalute = sasl.createCommand(
+        "watersalute/stop",
+        "Stop Water Salute Ceremony"
+    )
+    sasl.registerCommandHandler(cmdStopWaterSalute, 0, function(phase)
+        if phase == SASL_COMMAND_BEGIN then
+            stopWaterSalute()
+        end
+        return 0
+    end)
+    
+    -- Create command: Toggle Water Salute
+    cmdToggleWaterSalute = sasl.createCommand(
+        "watersalute/toggle",
+        "Toggle Water Salute Ceremony"
+    )
+    sasl.registerCommandHandler(cmdToggleWaterSalute, 0, function(phase)
+        if phase == SASL_COMMAND_BEGIN then
+            if pluginState == STATE_IDLE then
+                startWaterSalute()
+            else
+                stopWaterSalute()
+            end
+        end
+        return 0
+    end)
+    
+    -- Create command: Truck Horn
+    cmdTruckHorn = sasl.createCommand(
+        "watersalute/horn",
+        "Sound Fire Truck Horn"
+    )
+    sasl.registerCommandHandler(cmdTruckHorn, 0, function(phase)
+        if phase == SASL_COMMAND_BEGIN then
+            playTruckHorn()
+        end
+        return 0
+    end)
+    
+    debugLog("Commands registered: watersalute/start, watersalute/stop, watersalute/toggle, watersalute/horn")
+end
+
+--------------------------------------------------------------------------------
+-- Sound System
+--------------------------------------------------------------------------------
+
+function loadSounds()
+    debugLog("Loading sound samples...")
+    
+    -- Load water spray sound (looping)
+    soundWaterSpray = sasl.al.loadSample("water_spray.wav")
+    if soundWaterSpray then
+        sasl.al.setSampleGain(soundWaterSpray, SOUND_WATER_SPRAY_GAIN)
+        sasl.al.setSampleMaxDistance(soundWaterSpray, SOUND_MAX_DISTANCE)
+        sasl.al.setSampleEnv(soundWaterSpray, SOUND_EVERYWHERE)
+        debugLog("Water spray sound loaded")
+    else
+        debugLog("WARNING: water_spray.wav not found in resources folder")
+    end
+    
+    -- Load truck engine sound (looping)
+    soundTruckEngine = sasl.al.loadSample("truck_engine.wav")
+    if soundTruckEngine then
+        sasl.al.setSampleGain(soundTruckEngine, SOUND_TRUCK_ENGINE_GAIN)
+        sasl.al.setSampleMaxDistance(soundTruckEngine, SOUND_MAX_DISTANCE)
+        sasl.al.setSampleEnv(soundTruckEngine, SOUND_EVERYWHERE)
+        debugLog("Truck engine sound loaded")
+    else
+        debugLog("WARNING: truck_engine.wav not found in resources folder")
+    end
+    
+    -- Load truck horn sound
+    soundTruckHorn = sasl.al.loadSample("truck_horn.wav")
+    if soundTruckHorn then
+        sasl.al.setSampleGain(soundTruckHorn, SOUND_TRUCK_HORN_GAIN)
+        sasl.al.setSampleMaxDistance(soundTruckHorn, SOUND_MAX_DISTANCE)
+        sasl.al.setSampleEnv(soundTruckHorn, SOUND_EVERYWHERE)
+        debugLog("Truck horn sound loaded")
+    else
+        debugLog("WARNING: truck_horn.wav not found in resources folder")
+    end
+end
+
+function unloadSounds()
+    if soundWaterSpray then
+        sasl.al.unloadSample(soundWaterSpray)
+        soundWaterSpray = nil
+    end
+    if soundTruckEngine then
+        sasl.al.unloadSample(soundTruckEngine)
+        soundTruckEngine = nil
+    end
+    if soundTruckHorn then
+        sasl.al.unloadSample(soundTruckHorn)
+        soundTruckHorn = nil
+    end
+end
+
+function startWaterSpraySound()
+    if not userSettings.soundEnabled then return end
+    if soundWaterSpray and not sasl.al.isSamplePlaying(soundWaterSpray) then
+        sasl.al.playSample(soundWaterSpray, true)  -- Loop
+        debugLog("Water spray sound started")
+    end
+end
+
+function stopWaterSpraySound()
+    if soundWaterSpray and sasl.al.isSamplePlaying(soundWaterSpray) then
+        sasl.al.stopSample(soundWaterSpray)
+    end
+end
+
+function startTruckEngineSound()
+    if not userSettings.soundEnabled then return end
+    if soundTruckEngine and not sasl.al.isSamplePlaying(soundTruckEngine) then
+        sasl.al.playSample(soundTruckEngine, true)  -- Loop
+        debugLog("Truck engine sound started")
+    end
+end
+
+function stopTruckEngineSound()
+    if soundTruckEngine and sasl.al.isSamplePlaying(soundTruckEngine) then
+        sasl.al.stopSample(soundTruckEngine)
+    end
+end
+
+function playTruckHorn()
+    if not userSettings.soundEnabled then return end
+    if soundTruckHorn then
+        -- Set position to truck location
+        if leftTruck then
+            sasl.al.setSamplePosition(soundTruckHorn, leftTruck.x, leftTruck.y, leftTruck.z)
+        end
+        sasl.al.playSample(soundTruckHorn, false)  -- Play once
+        debugLog("Truck horn played")
+    end
+end
+
+function updateSoundPositions()
+    -- Update 3D sound positions to follow trucks
+    if leftTruck and rightTruck then
+        -- Average position between trucks for water spray
+        if soundWaterSpray then
+            local avgX = (leftTruck.x + rightTruck.x) / 2
+            local avgY = (leftTruck.y + rightTruck.y) / 2 + 5  -- Above trucks
+            local avgZ = (leftTruck.z + rightTruck.z) / 2
+            sasl.al.setSamplePosition(soundWaterSpray, avgX, avgY, avgZ)
+        end
+        
+        -- Engine sound at left truck position
+        if soundTruckEngine then
+            sasl.al.setSamplePosition(soundTruckEngine, leftTruck.x, leftTruck.y, leftTruck.z)
+        end
+    end
+end
+
+function stopAllSounds()
+    stopWaterSpraySound()
+    stopTruckEngineSound()
+    if soundTruckHorn and sasl.al.isSamplePlaying(soundTruckHorn) then
+        sasl.al.stopSample(soundTruckHorn)
+    end
+end
+
+--------------------------------------------------------------------------------
+-- Configuration System
+--------------------------------------------------------------------------------
+
+function loadConfiguration()
+    debugLog("Loading configuration...")
+    
+    if CONFIG_FILE_PATH and isFileExists(CONFIG_FILE_PATH) then
+        local config = sasl.readConfig(CONFIG_FILE_PATH, "json")
+        if config then
+            -- Merge loaded config with defaults
+            if config.soundEnabled ~= nil then userSettings.soundEnabled = config.soundEnabled end
+            if config.soundVolume ~= nil then userSettings.soundVolume = config.soundVolume end
+            if config.autoStartOnGround ~= nil then userSettings.autoStartOnGround = config.autoStartOnGround end
+            if config.truckSpeed ~= nil then userSettings.truckSpeed = config.truckSpeed end
+            if config.waterJetHeight ~= nil then userSettings.waterJetHeight = config.waterJetHeight end
+            debugLog("Configuration loaded from " .. CONFIG_FILE_PATH)
+        else
+            debugLog("Failed to parse configuration file, using defaults")
+        end
+    else
+        debugLog("No configuration file found, using defaults")
+    end
+    
+    -- Apply sound volume
+    applySoundVolume()
+end
+
+function saveConfiguration()
+    if not CONFIG_FILE_PATH then return end
+    
+    local result = sasl.writeConfig(CONFIG_FILE_PATH, "json", userSettings)
+    if result then
+        debugLog("Configuration saved to " .. CONFIG_FILE_PATH)
+    else
+        debugLog("WARNING: Failed to save configuration")
+    end
+end
+
+function applySoundVolume()
+    local volumeMultiplier = userSettings.soundVolume / 100.0
+    
+    if soundWaterSpray then
+        sasl.al.setSampleGain(soundWaterSpray, math.floor(SOUND_WATER_SPRAY_GAIN * volumeMultiplier))
+    end
+    if soundTruckEngine then
+        sasl.al.setSampleGain(soundTruckEngine, math.floor(SOUND_TRUCK_ENGINE_GAIN * volumeMultiplier))
+    end
+    if soundTruckHorn then
+        sasl.al.setSampleGain(soundTruckHorn, math.floor(SOUND_TRUCK_HORN_GAIN * volumeMultiplier))
+    end
 end
 
 --------------------------------------------------------------------------------
@@ -433,6 +735,9 @@ function startWaterSalute()
         end
     end
     
+    -- Start truck engine sound
+    startTruckEngineSound()
+    
     pluginState = STATE_TRUCKS_APPROACHING
     updateMenuState()
     
@@ -452,6 +757,9 @@ function stopWaterSalute()
         debugLog("Trucks already leaving")
         return
     end
+    
+    -- Stop water spray sound
+    stopWaterSpraySound()
     
     -- Set trucks to leave
     leftTruck.isTurningBeforeLeave = true
@@ -489,6 +797,9 @@ function update()
     -- Update custom datarefs
     updateCustomDatarefs()
     
+    -- Update 3D sound positions
+    updateSoundPositions()
+    
     if pluginState == STATE_TRUCKS_APPROACHING or pluginState == STATE_TRUCKS_POSITIONING then
         updateTrucks(dt)
     elseif pluginState == STATE_WATER_SPRAYING then
@@ -497,6 +808,7 @@ function update()
         updateTruckWaterEffect(leftTruck, dt, waterDropObjectId, currentTime, true)
         updateTruckWaterEffect(rightTruck, dt, waterDropObjectId, currentTime, true)
         updateRaindropEffect(dt, acX, acY, acZ, pluginState)
+        -- Water spray sound is started when transitioning to this state
     elseif pluginState == STATE_TRUCKS_LEAVING then
         -- Turn off water effects when leaving
         local currentTime = os.clock()
@@ -519,6 +831,8 @@ function updateTrucks(dt)
         
         if allPositioned and leftTruck.positioned and rightTruck.positioned then
             pluginState = STATE_WATER_SPRAYING
+            -- Start water spray sound when spraying begins
+            startWaterSpraySound()
             debugLog("State changed to: " .. getStateName(pluginState))
         end
     elseif pluginState == STATE_TRUCKS_LEAVING then
@@ -528,6 +842,8 @@ function updateTrucks(dt)
         if leftDone and rightDone then
             cleanupTruck(leftTruck)
             cleanupTruck(rightTruck)
+            -- Stop all sounds when ceremony ends
+            stopAllSounds()
             pluginState = STATE_IDLE
             updateMenuState()
             debugLog("State changed to: " .. getStateName(pluginState))

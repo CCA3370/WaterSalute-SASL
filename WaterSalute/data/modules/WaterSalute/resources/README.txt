@@ -59,3 +59,35 @@ or create your own compatible models.
 
 The plugin will log which water effect mode is being used on startup.
 If no water models are found, trucks will still move but won't spray water.
+
+## Sound Files (Optional)
+
+The plugin supports 3D positional audio for an immersive experience.
+Place WAV format sound files in this folder:
+
+### water_spray.wav
+- Water spray/jet sound effect
+- Will loop continuously during water spraying phase
+- Should be a seamless loopable sample
+
+### truck_engine.wav  
+- Fire truck engine/diesel sound
+- Will loop while trucks are moving
+- Should be a seamless loopable sample
+
+### truck_horn.wav
+- Fire truck horn/siren
+- Plays once when triggered via watersalute/horn command
+- Bound to the watersalute/horn X-Plane command
+
+### Sound Requirements
+- Format: WAV (mono recommended for 3D positioning)
+- Sample rate: 44100 Hz recommended
+- Bit depth: 16-bit
+
+The sounds are 3D positioned and will:
+- Follow the fire truck positions
+- Attenuate with distance (max 500m)
+- Work in both internal and external camera views
+
+If sound files are not found, the plugin will work silently.
