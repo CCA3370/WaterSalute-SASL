@@ -3,7 +3,6 @@ luac.out
 
 # luarocks build files
 *.src.rock
-*.zip
 *.tar.gz
 
 # Object files
@@ -26,10 +25,13 @@ luac.out
 *.exp
 
 # Shared objects (inc. Windows DLLs)
-*.dll
+# But keep the SASL plugin binaries
 *.so
 *.so.*
 *.dylib
+!WaterSalute/64/*.xpl
+!WaterSalute/64/*.dll
+!WaterSalute/liblinux/*.so*
 
 # Executables
 *.exe
@@ -39,3 +41,14 @@ luac.out
 *.x86_64
 *.hex
 
+# X-Plane log files
+Log.txt
+GizmoLog.txt
+
+# MacOS
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+*~
