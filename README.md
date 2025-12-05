@@ -8,7 +8,7 @@ X-Plane 12 SASL3 (Lua) 插件，模拟飞机过水门仪式。两辆消防车驶
 - 自动检查飞机在地面且速度 < 40 节
 - 消防车根据飞机翼展自动定位
 - 8x8 消防车物理转向模型（阿克曼转向）
-- 水粒子效果系统
+- **水柱喷射效果**（支持两种实现方式）
 - **飞机经过水门时，玻璃上出现雨滴效果**
 - 道路网络路径规划（读取 apt.dat）
 
@@ -24,12 +24,47 @@ X-Plane 12 SASL3 (Lua) 插件，模拟飞机过水门仪式。两辆消防车驶
 
 ## 资源文件
 
-需要在 `WaterSalute/data/modules/WaterSalute/resources/` 目录下放置以下模型文件：
+需要在 `WaterSalute/data/modules/WaterSalute/resources/` 目录下放置模型文件：
+
+### 必需
 
 - `firetruck.obj` - 消防车3D模型
-- `waterdrop.obj` - 水滴粒子模型
 
-可以从 WaterSalute C++ 版本的 fountains.zip 中获取这些模型。
+### 水柱效果（二选一）
+
+| 文件 | 说明 | 性能 |
+|------|------|------|
+| `waterjet.obj` | **推荐** - 动画水柱模型，使用 dataref 控制动画 | 优秀（每辆车1个实例） |
+| `waterdrop.obj` | 备选 - 水滴粒子模型，创建多个实例模拟水柱 | 一般（每辆车~200个实例） |
+
+插件启动时会优先加载 `waterjet.obj`，如果找不到则使用 `waterdrop.obj` 粒子系统。
+
+## 水柱效果实现
+
+### 方式一：动画水柱模型（推荐）
+
+使用带 dataref 动画的单个 OBJ 模型，这是 SASL3 推荐的高性能实现方式：
+
+```
+OBJ 动画 datarefs:
+- watersalute/waterjet/active     (0-1) 控制显示/隐藏
+- watersalute/waterjet/intensity  (0-1) 控制喷射强度
+```
+
+优点：
+- 更好的性能（只有2个实例）
+- 更平滑的视觉效果
+- 利用 X-Plane 原生 OBJ 动画系统
+
+### 方式二：粒子系统（备选）
+
+创建大量水滴实例，通过物理模拟实现喷射效果：
+
+- 每帧发射新粒子
+- 应用重力、空气阻力、湍流
+- 地面碰撞检测
+
+可以从 WaterSalute C++ 版本的 fountains.zip 中获取模型文件。
 
 ## 雨滴效果
 

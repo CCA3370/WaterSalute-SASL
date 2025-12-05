@@ -1,7 +1,38 @@
 --------------------------------------------------------------------------------
 -- WaterSalute SASL3 Plugin - Fire Truck Module
--- Handles fire truck data structures, movement, and water particle system
+-- Handles fire truck data structures, movement, and water effects
+--
+-- Water Effects Implementation Options:
+-- 
+-- 1. ANIMATED WATER STREAM (Recommended - Better Performance):
+--    Use a water stream OBJ file with dataref-driven animations.
+--    The OBJ file should have animations controlled by datarefs:
+--    - watersalute/waterjet/active (0/1) - controls visibility
+--    - watersalute/waterjet/intensity (0-1) - controls spray width/volume
+--    This is more performant and looks better than particle systems.
+--    
+--    To use: Place 'waterjet.obj' in resources folder with animations.
+--
+-- 2. PARTICLE SYSTEM (Fallback):
+--    Creates individual water drop instances that follow physics.
+--    Less performant but works with simple sphere OBJ models.
+--    
+--    To use: Place 'waterdrop.obj' in resources folder.
+--
+-- The plugin will attempt to load waterjet.obj first, falling back to
+-- the particle system if not found.
 --------------------------------------------------------------------------------
+
+-- Water effect mode
+WATER_EFFECT_NONE = 0
+WATER_EFFECT_STREAM = 1      -- Single animated OBJ per truck
+WATER_EFFECT_PARTICLES = 2   -- Multiple particle instances
+
+-- Current water effect mode
+waterEffectMode = WATER_EFFECT_NONE
+
+-- Water stream object ID (for animated stream approach)
+waterStreamObjectId = nil
 
 -- Fire truck structure template
 function createFireTruck()
@@ -41,7 +72,11 @@ function createFireTruck()
         route = nil,
         useRoadNetwork = false,
         
-        -- Water particles
+        -- Water stream instance (for animated stream mode)
+        waterStreamInstance = nil,
+        waterStreamActive = false,
+        
+        -- Water particles (for particle mode fallback)
         particles = {},
         lastEmitTime = 0
     }
@@ -73,6 +108,8 @@ function initializeTruck(truck)
     truck.leaveHeading = 0
     truck.route = nil
     truck.useRoadNetwork = false
+    truck.waterStreamInstance = nil
+    truck.waterStreamActive = false
     truck.particles = {}
     truck.lastEmitTime = 0
 end
@@ -83,6 +120,13 @@ function cleanupTruck(truck)
         sasl.destroyInstance(truck.instance)
         truck.instance = nil
     end
+    
+    -- Clean up water stream instance
+    if truck.waterStreamInstance then
+        sasl.destroyInstance(truck.waterStreamInstance)
+        truck.waterStreamInstance = nil
+    end
+    truck.waterStreamActive = false
     
     -- Clean up all particle instances
     for i, particle in ipairs(truck.particles) do
@@ -286,6 +330,104 @@ function updateTruckParticles(truck, dt, waterDropObjectId, currentTime)
             end
         end
     end
+end
+
+--------------------------------------------------------------------------------
+-- Water Stream Functions (Recommended Approach)
+-- Uses a single animated OBJ file per truck instead of many particles
+--------------------------------------------------------------------------------
+
+-- Datarefs for water stream animation control
+local waterStreamDatarefs = {
+    "watersalute/waterjet/active",      -- 0 or 1, controls visibility
+    "watersalute/waterjet/intensity"    -- 0-1, controls spray width/volume
+}
+
+-- Create water stream instance for a truck
+function createWaterStreamInstance(truck)
+    if not waterStreamObjectId then
+        return false
+    end
+    
+    if truck.waterStreamInstance then
+        return true  -- Already created
+    end
+    
+    -- Create instance with animation datarefs
+    truck.waterStreamInstance = sasl.createInstance(waterStreamObjectId, waterStreamDatarefs)
+    
+    if truck.waterStreamInstance then
+        debugLog("Water stream instance created for truck")
+        return true
+    else
+        debugLog("WARNING: Failed to create water stream instance")
+        return false
+    end
+end
+
+-- Update water stream position and animation
+function updateWaterStream(truck, active)
+    if not truck.waterStreamInstance then
+        return
+    end
+    
+    -- Calculate nozzle world position
+    local headingRad = truck.heading * DEG_TO_RAD
+    local cosH = math.cos(headingRad)
+    local sinH = math.sin(headingRad)
+    
+    -- Nozzle position in world coordinates
+    local streamX = truck.x + sinH * truck.nozzleOffsetZ + cosH * truck.nozzleOffsetX
+    local streamY = truck.y + truck.nozzleOffsetY
+    local streamZ = truck.z - cosH * truck.nozzleOffsetZ + sinH * truck.nozzleOffsetX
+    
+    -- Stream orientation: pitch from cannon, yaw from truck heading + cannon yaw
+    local streamPitch = truck.cannonPitch
+    local streamHeading = truck.heading + truck.cannonYaw
+    
+    -- Animation dataref values
+    local activeValue = active and 1.0 or 0.0
+    local intensityValue = active and 1.0 or 0.0
+    
+    -- Update instance position and animation datarefs
+    sasl.setInstancePosition(
+        truck.waterStreamInstance,
+        streamX, streamY, streamZ,
+        streamPitch, streamHeading, 0,
+        { activeValue, intensityValue }
+    )
+    
+    truck.waterStreamActive = active
+end
+
+-- Cleanup water stream for a truck
+function cleanupWaterStream(truck)
+    if truck.waterStreamInstance then
+        sasl.destroyInstance(truck.waterStreamInstance)
+        truck.waterStreamInstance = nil
+    end
+    truck.waterStreamActive = false
+end
+
+--------------------------------------------------------------------------------
+-- Unified Water Effect Update
+-- Automatically uses the best available method
+--------------------------------------------------------------------------------
+
+function updateTruckWaterEffect(truck, dt, waterDropObjectId, currentTime, active)
+    if waterEffectMode == WATER_EFFECT_STREAM then
+        -- Use animated water stream OBJ (better performance)
+        if active and not truck.waterStreamInstance then
+            createWaterStreamInstance(truck)
+        end
+        updateWaterStream(truck, active)
+    elseif waterEffectMode == WATER_EFFECT_PARTICLES then
+        -- Use particle system (fallback)
+        if active then
+            updateTruckParticles(truck, dt, waterDropObjectId, currentTime)
+        end
+    end
+    -- WATER_EFFECT_NONE: do nothing
 end
 
 -- Get truck by index (0 = left, 1 = right)

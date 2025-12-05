@@ -86,8 +86,8 @@ function onModuleInit()
     -- Load fire truck model
     loadFireTruckModel()
     
-    -- Load water drop model
-    loadWaterDropModel()
+    -- Load water effect models (tries waterjet.obj first, falls back to waterdrop.obj)
+    loadWaterEffectModels()
     
     -- Initialize raindrop effect system
     initializeRaindropEffect()
@@ -105,7 +105,7 @@ function onModuleShutdown()
     -- Cleanup raindrop effect
     cleanupRaindropEffect()
     
-    -- Cleanup trucks
+    -- Cleanup trucks (including water streams)
     if leftTruck then cleanupTruck(leftTruck) end
     if rightTruck then cleanupTruck(rightTruck) end
     
@@ -113,6 +113,10 @@ function onModuleShutdown()
     if truckObjectId then
         sasl.unloadObject(truckObjectId)
         truckObjectId = nil
+    end
+    if waterStreamObjectId then
+        sasl.unloadObject(waterStreamObjectId)
+        waterStreamObjectId = nil
     end
     if waterDropObjectId then
         sasl.unloadObject(waterDropObjectId)
@@ -176,15 +180,27 @@ function loadFireTruckModel()
     end
 end
 
-function loadWaterDropModel()
-    -- Use sasl.loadObject which uses the searchResourcesPath
+function loadWaterEffectModels()
+    -- Try to load animated water stream model first (recommended approach)
+    -- This is more performant than particle system as it uses a single OBJ with animations
+    waterStreamObjectId = sasl.loadObject("waterjet.obj")
+    
+    if waterStreamObjectId then
+        debugLog("Water stream model loaded successfully (using animated stream mode)")
+        waterEffectMode = WATER_EFFECT_STREAM
+        return
+    end
+    
+    -- Fall back to particle system with water drop model
     waterDropObjectId = sasl.loadObject("waterdrop.obj")
     
     if waterDropObjectId then
-        debugLog("Water drop model loaded successfully")
+        debugLog("Water drop model loaded (using particle system mode)")
+        waterEffectMode = WATER_EFFECT_PARTICLES
     else
-        debugLog("WARNING: Failed to load water drop model")
-        debugLog("Water particles will not be visible - please add waterdrop.obj to resources folder")
+        debugLog("WARNING: No water effect models found")
+        debugLog("Please add waterjet.obj (recommended) or waterdrop.obj to resources folder")
+        waterEffectMode = WATER_EFFECT_NONE
     end
 end
 
@@ -477,10 +493,15 @@ function update()
         updateTrucks(dt)
     elseif pluginState == STATE_WATER_SPRAYING then
         local currentTime = os.clock()
-        updateTruckParticles(leftTruck, dt, waterDropObjectId, currentTime)
-        updateTruckParticles(rightTruck, dt, waterDropObjectId, currentTime)
+        -- Use unified water effect function (automatically picks best method)
+        updateTruckWaterEffect(leftTruck, dt, waterDropObjectId, currentTime, true)
+        updateTruckWaterEffect(rightTruck, dt, waterDropObjectId, currentTime, true)
         updateRaindropEffect(dt, acX, acY, acZ, pluginState)
     elseif pluginState == STATE_TRUCKS_LEAVING then
+        -- Turn off water effects when leaving
+        local currentTime = os.clock()
+        updateTruckWaterEffect(leftTruck, dt, waterDropObjectId, currentTime, false)
+        updateTruckWaterEffect(rightTruck, dt, waterDropObjectId, currentTime, false)
         updateTrucks(dt)
         updateRaindropEffect(dt, acX, acY, acZ, pluginState)
     end
